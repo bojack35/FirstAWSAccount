@@ -1,0 +1,72 @@
+name: Terraform Destroy (Manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type DESTROY to confirm'
+        required: true
+        type: string
+      working_directory:
+        description: 'Terraform working directory'
+        required: false
+        default: "."
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+
+jobs:
+  destroy:
+    name: Destroy
+    runs-on: ubuntu-latest
+
+    # This forces the "Review deployments" click if you set required reviewers
+    environment: prod
+
+    defaults:
+      run:
+        working-directory: ${{ inputs.working_directory }}
+
+    steps:
+      - name: Check confirmation
+        if: ${{ inputs.confirm != 'DESTROY' }}
+        run: |
+          echo "Confirmation failed. You must type DESTROY exactly."
+          exit 1
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::417556509510:role/GitHubActionsTerraformRole
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Verify identity
+        run: aws sts get-caller-identity
+
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.8.5
+
+      - name: Terraform Init (S3 backend)
+        run: terraform init -input=false
+
+      - name: Terraform Destroy Plan (show output)
+        run: terraform plan -destroy -no-color -input=false | tee destroy-plan.txt
+
+      - name: Upload destroy plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: destroy-plan
+          path: ${{ inputs.working_directory }}/destroy-plan.txt
+
+      - name: Destroy
+        run: terraform destroy -auto-approve -input=false
