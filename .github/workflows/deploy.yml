@@ -1,31 +1,33 @@
-name: Terraform Deploy
+name: Terraform Plan then Apply (Approve)
 
 on:
-  pull_request:
   push:
-    branches:
-      - main
+    branches: [ "main" ]
 
 permissions:
-  id-token: write   # REQUIRED for OIDC
+  id-token: write
   contents: read
 
 env:
   AWS_REGION: us-east-1
 
 jobs:
-  terraform:
+  plan:
+    name: Terraform Plan
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Configure AWS credentials
+      - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::417556509510:role/GitHubActionsTerraformRole
+          role-to-assume: arn:aws:iam::<ACCOUNT_ID>:role/GitHubActionsTerraformRole
           aws-region: ${{ env.AWS_REGION }}
+
+      - name: Verify identity
+        run: aws sts get-caller-identity
 
       - name: Install Terraform
         uses: hashicorp/setup-terraform@v3
@@ -33,12 +35,46 @@ jobs:
           terraform_version: 1.8.5
 
       - name: Terraform Init
-        run: terraform init
+        run: terraform init -input=false
 
-      - name: Terraform Plan (PR only)
-        if: github.event_name == 'pull_request'
-        run: terraform plan
+      - name: Terraform Plan (show output + save)
+        run: |
+          terraform plan -no-color -input=false | tee tfplan.txt
 
-      - name: Terraform Apply (Main branch only)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: terraform apply -auto-approve
+      - name: Upload plan output
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan
+          path: tfplan.txt
+
+  apply:
+    name: Terraform Apply (Click to Approve)
+    needs: plan
+    runs-on: ubuntu-latest
+
+    # This triggers the "Review deployments" approval button
+    environment: prod
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::<ACCOUNT_ID>:role/GitHubActionsTerraformRole
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Verify identity
+        run: aws sts get-caller-identity
+
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.8.5
+
+      - name: Terraform Init
+        run: terraform init -input=false
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve -input=false
