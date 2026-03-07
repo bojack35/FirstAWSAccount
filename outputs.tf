@@ -22,6 +22,3 @@ output "tgw_attachment_id" {
   value = aws_ec2_transit_gateway_vpc_attachment.this.id
 }
 
-output "public_instance_public_ip" {
-  value = aws_instance.public.public_ip
-}
