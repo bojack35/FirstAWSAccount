@@ -52,7 +52,7 @@ resource "aws_ec2_transit_gateway_vpc_attachment" "inspection_attach" {
     aws_subnet.inspection_subnet_b.id
   ]
 
-  transit_gateway_id = var.tgw_id
+  transit_gateway_id = aws_ec2_transit_gateway.this.id
   vpc_id             = aws_vpc.inspection_vpc.id
 
   appliance_mode_support = "enable"
