@@ -2,7 +2,7 @@ name: Terraform Plan then Apply (Approve)
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
 
 permissions:
   id-token: write
@@ -15,6 +15,9 @@ jobs:
   plan:
     name: Terraform Plan
     runs-on: ubuntu-latest
+
+    outputs:
+      plan_status: ${{ steps.plan.outputs.status }}
 
     steps:
       - name: Checkout
@@ -37,27 +40,48 @@ jobs:
       - name: Terraform Init
         run: terraform init -input=false
 
-      - name: Terraform Plan (show output + save)
+      - name: Terraform Plan
+        id: plan
         run: |
-          terraform plan -no-color -input=false | tee tfplan.txt
+          set +e
+          terraform plan -no-color -input=false -detailed-exitcode -out=tfplan
+          EXITCODE=$?
 
-      - name: Upload plan output
+          if [ $EXITCODE -eq 1 ]; then
+            echo "Terraform plan failed."
+            exit 1
+          fi
+
+          if [ $EXITCODE -eq 2 ]; then
+            echo "changes=true" >> $GITHUB_OUTPUT
+          else
+            echo "changes=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Upload plan artifact
         uses: actions/upload-artifact@v4
         with:
           name: tfplan
-          path: tfplan.txt
+          path: tfplan
 
   apply:
-    name: Terraform Apply 
+    name: Terraform Apply
     needs: plan
     runs-on: ubuntu-latest
 
-    # This triggers the "Review deployments" approval button
+    # Only run if plan succeeded
+    if: ${{ needs.plan.result == 'success' }}
+
     environment: prod
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Download plan artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: tfplan
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
@@ -77,4 +101,4 @@ jobs:
         run: terraform init -input=false
 
       - name: Terraform Apply
-        run: terraform apply -auto-approve -input=false
+        run: terraform apply -input=false tfplan
