@@ -1,49 +1,63 @@
-# ############################
-# # Transit Gateway
-# ############################
+############################
+# TGW + Attachment + TGW Route Table
+############################
+resource "aws_ec2_transit_gateway" "this" {
+  description                     = "${var.name} tgw"
+  amazon_side_asn                 = 64512
+  default_route_table_association = "disable"
+  default_route_table_propagation = "disable"
+  dns_support                     = "enable"
+  vpn_ecmp_support                = "enable"
 
-# resource "aws_ec2_transit_gateway" "this" {
-#   description                     = "${var.name} transit gateway"
-#   amazon_side_asn                 = 64512
-#   auto_accept_shared_attachments  = "disable"
-#   default_route_table_association = "enable"
-#   default_route_table_propagation = "enable"
-#   dns_support                     = "enable"
-#   vpn_ecmp_support                = "enable"
+  tags = { Name = "${var.name}-tgw" }
+}
 
-#   tags = {
-#     Name = "${var.name}-tgw"
-#   }
-# }
+# Attach TGW to PRIVATE subnets (recommended)
+resource "aws_ec2_transit_gateway_vpc_attachment" "this" {
+  transit_gateway_id = aws_ec2_transit_gateway.this.id
+  vpc_id             = aws_vpc.this.id
+  subnet_ids         = [for s in aws_subnet.private : s.id]
 
-# ############################
-# # TGW VPC Attachment
-# ############################
+  dns_support  = "enable"
+  ipv6_support = "disable"
 
-# resource "aws_ec2_transit_gateway_vpc_attachment" "this" {
-#   transit_gateway_id = aws_ec2_transit_gateway.this.id
-#   vpc_id             = aws_vpc.this.id
+  tags = { Name = "${var.name}-tgw-attach" }
+}
 
-#   # Use one subnet per AZ for the attachment.
-#   # If your 4 subnets are in 4 AZs, you can attach all 4.
-#   # Here’s a safe default using the first 2:
-#   subnet_ids = [
-#     aws_subnet.this[0].id,
-#     aws_subnet.this[1].id
-#   ]
+resource "aws_ec2_transit_gateway_route_table" "this" {
+  transit_gateway_id = aws_ec2_transit_gateway.this.id
+  tags               = { Name = "${var.name}-tgw-rt" }
+}
 
-#   dns_support  = "enable"
-#   ipv6_support = "disable"
+# Associate the VPC attachment with the TGW route table
+resource "aws_ec2_transit_gateway_route_table_association" "vpc_assoc" {
+  transit_gateway_attachment_id  = aws_ec2_transit_gateway_vpc_attachment.this.id
+  transit_gateway_route_table_id = aws_ec2_transit_gateway_route_table.this.id
+}
 
-#   tags = {
-#     Name = "${var.name}-tgw-attach"
-#   }
-# }
+# Propagate VPC CIDR into the TGW route table (so other attachments can learn it)
+resource "aws_ec2_transit_gateway_route_table_propagation" "vpc_prop" {
+  transit_gateway_attachment_id  = aws_ec2_transit_gateway_vpc_attachment.this.id
+  transit_gateway_route_table_id = aws_ec2_transit_gateway_route_table.this.id
+}
 
-# output "tgw_id" {
-#   value = aws_ec2_transit_gateway.this.id
-# }
 
-# output "tgw_attachment_id" {
-#   value = aws_ec2_transit_gateway_vpc_attachment.this.id
-# }
+
+### inspection VPC attachment
+
+resource "aws_ec2_transit_gateway_vpc_attachment" "inspection_attach" {
+
+  subnet_ids = [
+    aws_subnet.inspection_subnet_a.id,
+    aws_subnet.inspection_subnet_b.id
+  ]
+
+  transit_gateway_id = var.tgw_id
+  vpc_id             = aws_vpc.inspection_vpc.id
+
+  appliance_mode_support = "enable"
+
+  tags = {
+    Name = "inspection-vpc-attachment"
+  }
+}
