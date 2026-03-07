@@ -168,7 +168,7 @@ resource "aws_route_table" "inspection_rt" {
 resource "aws_route" "default_to_tgw" {
   route_table_id         = aws_route_table.inspection_rt.id
   destination_cidr_block = "0.0.0.0/0"
-  transit_gateway_id     = var.tgw_id
+  transit_gateway_id     = aws_ec2_transit_gateway.this.id
 }
 
 resource "aws_route_table_association" "subnet_a_assoc" {

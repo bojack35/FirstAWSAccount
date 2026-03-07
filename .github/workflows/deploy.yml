@@ -48,7 +48,7 @@ jobs:
           path: tfplan.txt
 
   apply:
-    name: Terraform Apply (Click to Approve)
+    name: Terraform Apply 
     needs: plan
     runs-on: ubuntu-latest
 
