@@ -28,7 +28,3 @@ variable "instance_type" {
 variable "region" {
   default = "us-east-1"
 }
-
-variable "tgw_id" {
-  description = "Transit Gateway ID"
-}
